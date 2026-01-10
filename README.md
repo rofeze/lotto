@@ -3,7 +3,8 @@
 동행복권 자동구매 시스템 - 로또 6/45 및 연금복권 720 자동화
 
 > [!IMPORTANT]
-> 이 프로젝트는 동행복권 구매를 간편하게 도와주는 도구이며, **모든 구매 결과 및 예치금 사용에 대한 책임은 사용자 본인에게 있습니다.** 자동 구매 설정 시 신중하게 확인하시기 바랍니다.
+> 동행복권 구매지원 도구이며, 자동구매 설정시 신중한 확인 필요
+> **모든 구매 결과 및 예치금 사용 책임은 사용자 본인에게 있음**
 
 ## 📋 목차
 
@@ -27,8 +28,8 @@
 - ✅ **완전 자동화** - Playwright 기반 브라우저 자동화
 - ✅ **OCR 키패드 인식** - 랜덤 키패드 자동 입력 (Tesseract)
 - ✅ **결제 금액 검증** - 구매 전 금액 확인
-- ✅ **Systemd 타이머** - 매주 일요일 자동 실행
-- ✅ **유연한 설정** - 커맨드라인 인자 또는 .env 파일
+- ✅ **Systemd 타이머** - 매주 일요일 자동 실행 로직
+- ✅ **유연한 설정** - 커맨드라인 인자 또는 .env 파일 지원
 
 ## 📁 프로젝트 구조
 
@@ -41,7 +42,7 @@ lotto/
 │   ├── lotto645.py              # 로또 6/45 구매
 │   └── lotto720.py              # 연금복권 720 구매
 ├── scripts/                      # 실행 스크립트
-│   ├── run-lotto.sh             # 메인 워크플로우 스크립트
+│   ├── purchase.sh              # 메인 워크플로우 스크립트
 │   ├── setup-env.sh             # 환경 설정 (venv, pip)
 │   ├── install-systemd.sh       # Systemd 타이머 설치
 │   └── systemd/                 # Systemd 설정 파일
@@ -50,12 +51,12 @@ lotto/
 ├── .env                          # 환경 변수 (비공개)
 ├── .env.example                  # 환경 변수 예시
 ├── requirements.txt              # Python 의존성
-└── README.md                     # 이 파일
+└── README.md                     # 설명 문서
 ```
 
 ## 🚀 시작하기
 
-이 프로젝트는 두 가지 방식으로 사용할 수 있습니다. 상황에 맞는 방법을 선택하세요.
+두 가지 사용 방식 지원, 상황에 맞는 방법 선택
 
 1.  **Option A: 개인 서버/로컬 컴퓨터** - 내 컴퓨터나 Linux 서버(EC2, 홈서버 등)에서 직접 실행
 2.  **Option B: GitHub Actions** - 서버 없이 GitHub 클라우드에서 자동 실행
@@ -77,18 +78,18 @@ cd lotto
 cd scripts
 ./setup-env.sh
 ```
-이 스크립트는 Python 가상환경 생성, 의존성 설치, 브라우저 설치, .env 파일 생성을 자동으로 수행합니다.
+Python 가상환경 생성, 의존성 설치, 브라우저 설치, .env 파일 자동 생성
 
 ### 2. 환경 변수 설정
 
-`.env` 파일을 편집하여 로또 계정 정보를 입력하세요:
+`.env` 파일 편집하여 로또 계정 정보 입력
 ```bash
 nano ../.env
 ```
 
 ### 3. 수동 실행 (테스트)
 
-설정이 잘 되었는지 확인하기 위해 수동으로 실행해 볼 수 있습니다.
+설정 확인을 위한 수동 실행
 
 ```bash
 cd ~/GitHub/lotto
@@ -96,14 +97,14 @@ source .venv/bin/activate
 ```
 
 -   **잔액 확인**: `./src/balance.py`
--  #### 5. 전체 워크플로우 실행
+-   **전체 워크플로우 실행**:
 ```bash
 ./scripts/purchase.sh
 ```
 
 ### 4. 자동화 설정 (Systemd 타이머)
 
-Linux 서버라면 Systemd를 이용해 매주 일요일 아침에 자동으로 실행되도록 설정할 수 있습니다.
+Linux 서버 Systemd 이용 매주 일요일 아침 자동 실행 설정
 
 **설치:**
 ```bash
@@ -122,14 +123,14 @@ journalctl --user -u lotto.service -f    # 로그 확인
 
 ## ☁️ Option B: GitHub Actions (서버 없음)
 
-개인 서버가 없다면 GitHub Actions를 이용해 매주 자동으로 실행할 수 있습니다. 컴퓨터를 켜둘 필요가 없습니다.
+개인 서버 없이 GitHub Actions 이용 매주 자동 실행 가능, 컴퓨터 상시 가동 불필요
 
 ### 1. Fork 하기
-이 저장소를 본인의 GitHub 계정으로 **Fork** 하세요.
+이 저장소를 본인의 GitHub 계정으로 **Fork** 수행
 
 ### 2. Secrets 설정
 
-Fork한 리포지토리의 **Settings > Secrets and variables > Actions**에서 `New repository secret`을 클릭하여 다음 변수들을 추가하세요:
+Fork한 리포지토리의 **Settings > Secrets and variables > Actions**에서 `New repository secret` 클릭 후 변수 추가
 
 | Name | Value | 설명 |
 |------|-------|------|
@@ -141,8 +142,8 @@ Fork한 리포지토리의 **Settings > Secrets and variables > Actions**에서 
 
 ### 3. 실행 확인
 
--   **자동 실행**: 매주 일요일 09:00 (KST)에 자동으로 실행됩니다.
--   **수동 실행**: 상단 **Actions** 탭 > **Lotto Purchase** 워크플로우 선택 > **Run workflow** 버튼 클릭.
+-   **자동 실행**: 매주 일요일 09:00 (KST) 자동 실행
+-   **수동 실행**: 상단 **Actions** 탭 > **Lotto Purchase** 워크플로우 선택 > **Run workflow** 버튼 클릭
 
 ---
 
@@ -191,12 +192,12 @@ MANUAL_NUMBERS=[]
 
 #### `charge.py`
 - 간편충전 기능 (가상계좌 입금 아님)
-- OCR로 랜덤 키패드 자동 인식
+- OCR 활용 랜덤 키패드 자동 인식
 - 지원 금액: 5,000원, 10,000원, 20,000원
 
 #### `login.py`
 - 공통 로그인 모듈
-- 다른 스크립트에서 import하여 사용
+- 타 스크립트 import 사용
 
 #### `lotto645.py`
 - 로또 6/45 구매
@@ -205,7 +206,7 @@ MANUAL_NUMBERS=[]
 
 #### `lotto720.py`
 - 연금복권 720 구매
-- 임의의 숫자로 모든 조(組) 자동 선택
+- 임의 번호 모든 조(組) 자동 선택
 - 고정 금액: 5,000원
 - 결제 금액 검증
 
@@ -245,11 +246,11 @@ Systemd 타이머 설치:
 
 ## ⚠️ 주의사항
 
-1. **간편 충전 사용**: 이 시스템은 [간편충전] 기능을 사용합니다. [가상계좌 입금]이 아닙니다.
-2. **OCR 정확도**: 키패드 숫자 인식률은 약 90-95%입니다. 실패 시 재시도하거나 수동으로 확인하세요.
-3. **Linux 전용**: Systemd 타이머는 Linux에서만 작동합니다. macOS는 launchd를 사용해야 합니다.
-4. **보안**: `.env` 파일은 절대 Git에 커밋하지 마세요. `.gitignore`에 포함되어 있습니다.
-5. **테스트**: 실제 사용 전 수동으로 각 스크립트를 테스트하세요.
+1. **간편 충전 사용**: [간편충전] 기능 사용, [가상계좌 입금] 미지원
+2. **OCR 정확도**: 키패드 숫자 인식률 약 90-95%, 실패 시 재시도 또는 수동 확인 요망
+3. **Linux 전용**: Systemd 타이머 Linux 전용, macOS launchd 사용 필요
+4. **보안**: `.env` 파일 커밋 금지 (.gitignore 포함)
+5. **테스트**: 실제 사용 전 수동 스크립트 테스트 권장
 
 ## 🐛 트러블슈팅
 
@@ -288,11 +289,11 @@ systemctl --user restart lotto.timer
 ```
 
 ### GitHub Actions 자동 실행 활성화
-기본적으로 `.github/workflows/purchase.yml`의 자동 실행 스케줄은 주석 처리되어 있습니다.
-자동 실행을 원하면 해당 파일에서 `schedule` 부분의 주석(` # `)을 제거하세요.
+기본적으로 `.github/workflows/purchase.yml` 자동 실행 스케줄 주석 처리됨
+자동 실행 희망 시 해당 파일 `schedule` 부분 주석(` # `) 제거 요망
 
 **Cron 설정 참고:**
-- **시간**: UTC 기준입니다 (한국 시간보다 9시간 느림).
+- **시간**: UTC 기준 (한국 시간 -9시간)
   - 예: `30 0 * * 1` → UTC 00:30 (한국 시간 월요일 오전 09:30)
 - **요일**: `0` (일요일) ~ `6` (토요일)
 
@@ -303,5 +304,5 @@ systemctl --user restart lotto.timer
 
 # 수정 후
 schedule:
-  - cron: '0 0 * * 0'
+  - cron: '30 0 * * 1'
 ```
