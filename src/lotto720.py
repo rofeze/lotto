@@ -30,7 +30,7 @@ def run(playwright: Playwright) -> None:
     try:
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
         print("🚀 Navigating to Lotto 720 Wrapper page...")
-        page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72")
+        page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000, wait_until="domcontentloaded")
         
         # Access the game iframe
         # The actual game UI is loaded inside this iframe

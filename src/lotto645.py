@@ -111,7 +111,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
         login(page)
 
         # Navigate to game page
-        page.goto(url="https://ol.dhlottery.co.kr/olotto/game/game645.do")
+        page.goto(url="https://ol.dhlottery.co.kr/olotto/game/game645.do", timeout=30000, wait_until="domcontentloaded")
         print('✅ Navigated to Lotto 6/45 page')
 
         # Dismiss popup if present
