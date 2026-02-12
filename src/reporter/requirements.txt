@@ -1,0 +1,2 @@
+# No external dependencies required (uses standard urllib)
+# If you prefer requests, you can add it here and update logger.py

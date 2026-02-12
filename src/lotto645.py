@@ -3,6 +3,9 @@ import json
 import re
 import sys
 import time
+import socket
+import traceback
+import datetime
 from os import environ
 from pathlib import Path
 from dotenv import load_dotenv
@@ -10,6 +13,9 @@ from playwright.sync_api import Playwright, sync_playwright
 from login import login
 
 # .env loading is handled by login module import
+
+
+from reporter import Reporter
 
 
 def parse_arguments():
@@ -42,14 +48,14 @@ def parse_arguments():
             # Check if it's a valid auto game amount (1000-5000 in 1000 increments)
             if amount in [1000, 2000, 3000, 4000, 5000]:
                 auto_games = amount // 1000
-                print(f"ℹ️  Auto mode: {auto_games} game(s) (₩{amount:,})")
+                print(f"Auto mode: {auto_games} game(s) ({amount:,} KRW)")
                 return auto_games, []
             else:
-                print(f"❌ Error: Invalid amount '{args[0]}'")
+                print(f"Error: Invalid amount '{args[0]}'")
                 print(f"Valid amounts: 1000, 2000, 3000, 4000, 5000")
                 sys.exit(1)
         except ValueError:
-            print(f"❌ Error: Invalid amount format '{args[0]}'")
+            print(f"Error: Invalid amount format '{args[0]}'")
             sys.exit(1)
     
     # Case 2: Six arguments (manual number selection)
@@ -59,28 +65,28 @@ def parse_arguments():
             
             # Validate: all numbers must be 1-45
             if not all(1 <= n <= 45 for n in numbers):
-                print(f"❌ Error: All numbers must be between 1 and 45")
+                print(f"Error: All numbers must be between 1 and 45")
                 print(f"Provided: {numbers}")
                 sys.exit(1)
             
             # Validate: no duplicates
             if len(numbers) != len(set(numbers)):
-                print(f"❌ Error: Numbers must not contain duplicates")
+                print(f"Error: Numbers must not contain duplicates")
                 print(f"Provided: {numbers}")
                 sys.exit(1)
             
             # Sort numbers for display
             sorted_numbers = sorted(numbers)
-            print(f"ℹ️  Manual mode: {sorted_numbers}")
+            print(f"Manual mode: {sorted_numbers}")
             return 0, [numbers]
             
         except ValueError:
-            print(f"❌ Error: All arguments must be numbers")
+            print(f"Error: All arguments must be numbers")
             print(f"Provided: {args}")
             sys.exit(1)
     
     else:
-        print(f"❌ Error: Invalid number of arguments")
+        print(f"Error: Invalid number of arguments")
         print(f"\nUsage:")
         print(f"  Auto games:   ./lotto645.py [AMOUNT]")
         print(f"                where AMOUNT is 1000, 2000, 3000, 4000, or 5000")
@@ -92,17 +98,21 @@ def parse_arguments():
         sys.exit(1)
 
 
-def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
+def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter: Reporter) -> dict:
     """
     로또 6/45를 자동 및 수동으로 구매합니다.
     
     Args:
         playwright: Playwright 객체
         auto_games: 자동 구매 게임 수
-        manual_numbers: 수동 구매 번호 리스트 (예: [[1,2,3,4,5,6], ...])
+        manual_numbers: 수동 구매 번호 리스트
+        reporter: Reporter 객체
+    
+    Returns:
+        dict: 처리 결과 세부 정보 (processed_count 등)
     """
     # Create browser, context, and page
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=True)
     context = browser.new_context()
     page = context.new_page()
     
@@ -111,27 +121,31 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
 
     # Perform login
     try:
+        reporter.stage("LOGIN")
         login(page)
 
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
-        print("🚀 Navigating to Lotto 6/45 Wrapper page...")
+        reporter.stage("NAVIGATE")
+        print("Navigating to Lotto 6/45 Wrapper page...")
         game_url = "https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LO40"
         page.goto(game_url, timeout=30000)
         
         # Check if we were redirected to login page (session lost)
         time.sleep(1) 
         if "/login" in page.url or "method=login" in page.url:
-            print("⚠️ Redirection detected. Attempting to log in again...")
+            print("Redirection detected. Attempting to log in again...")
+            reporter.stage("RELOGIN")
             login(page)
             page.goto(game_url, timeout=30000)
 
         # Access the game iframe
+        reporter.stage("IFRAME_LOAD")
         print("Waiting for game iframe to load...")
         try:
             page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
-            print("✅ Iframe #ifrm_tab found")
+            print("Iframe #ifrm_tab found")
         except Exception:
-            print("⚠️ Iframe #ifrm_tab not visible. Current URL:", page.url)
+            print("Iframe #ifrm_tab not visible. Current URL:", page.url)
             
         frame = page.frame_locator("#ifrm_tab")
 
@@ -139,25 +153,30 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
         try:
              # Wait for a core element inside the frame
              frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=30000)
+             # Wait for the game interface
+             frame.locator("#num2").wait_for(state="visible", timeout=15000)
+             print("Game interface loaded (#num2 visible)")
         except Exception as e:
-             print(f"⚠️ Timeout waiting for iframe content ({e}). Retrying navigation...")
+             # Retry once if it fails
+             print(f"Timeout waiting for iframe content ({e}). Retrying navigation...")
              page.reload(wait_until="networkidle")
              page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
              frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=30000)
 
-        print('✅ Navigated to Lotto 6/45 Game Frame')
+        print('Navigated to Lotto 6/45 Game Frame')
 
         # Check if we are logged in on this frame
         try:
             user_id_val = frame.locator("input[name='USER_ID']").get_attribute("value")
             if not user_id_val:
-                print("⚠️ Session not found in frame. Re-verifying...")
+                print("Session not found in frame. Re-verifying...")
                 # Some versions might hide logout button instead
                 if not frame.get_by_text("로그아웃").first.is_visible(timeout=5000):
+                    reporter.stage("RELOGIN_FRAME")
                     login(page)
                     page.goto(game_url, timeout=30000)
             else:
-                print(f"🔑 Login ID on Game Page: {user_id_val}")
+                print(f"Login ID on Game Page: {user_id_val}")
         except Exception:
             pass
 
@@ -178,14 +197,11 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
             }
         """)
 
-        # Wait for the game interface
-        frame.locator("#num2").wait_for(state="visible", timeout=15000)
-        print("✅ Game interface loaded (#num2 visible)")
-
         # Manual numbers
+        reporter.stage("SELECT_NUMBERS")
         if manual_numbers and len(manual_numbers) > 0:
             for game in manual_numbers:
-                print(f"🎰 Adding manual game: {game}")
+                print(f"Adding manual game: {game}")
                 for number in game:
                     frame.locator(f'label[for="check645num{number}"]').click(force=True)
                 frame.locator("#btnSelectNum").click()
@@ -195,13 +211,13 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
             frame.locator("#num2").click() 
             frame.locator("#amoundApply").select_option(str(auto_games))
             frame.locator("#btnSelectNum").click()
-            print(f'✅ Automatic game(s) added: {auto_games}')
+            print(f'Automatic game(s) added: {auto_games}')
 
         # Check if any games were added
         total_games = len(manual_numbers) + auto_games
         if total_games == 0:
-            print('⚠️  No games to purchase!')
-            return
+            print('No games to purchase!')
+            return {"processed_count": 0}
 
         # Verify payment amount
         time.sleep(1)
@@ -211,10 +227,10 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
         expected_amount = total_games * 1000
         
         if payment_amount != expected_amount:
-            print(f'❌ Error: Payment mismatch (Expected {expected_amount}, Displayed {payment_amount})')
-            return
+            raise Exception(f"Payment mismatch (Expected {expected_amount}, Displayed {payment_amount})")
         
         # Purchase
+        reporter.stage("PURCHASE")
         frame.locator("#btnBuy").click()
         
         # Confirm purchase popup (Inside Frame)
@@ -223,16 +239,17 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
         
         # Check for purchase limit alert or recommendation popup AFTER confirmation
         time.sleep(3)
+        reporter.stage("CHECK_RESULT")
         
         # 1. Check for specific limit exceeded recommendation popup
         limit_popup = frame.locator("#recommend720Plus")
         if limit_popup.is_visible():
-            print("❌ Error: Weekly purchase limit exceeded (detected limit popup).")
-            content = limit_popup.locator(".cont1").inner_text()
-            print(f"   Message: {content.strip()}")
-            return
+            content = limit_popup.locator(".cont1").inner_text().strip()
+            print(f"Error: Weekly purchase limit exceeded (detected limit popup). Message: {content}")
+            raise Exception(f"Weekly purchase limit exceeded: {content}")
 
-        print(f'✅ Lotto 6/45: All {total_games} games purchased successfully!')
+        print(f'Lotto 6/45: All {total_games} games purchased successfully!')
+        return {"processed_count": total_games}
 
 
     finally:
@@ -242,8 +259,16 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list) -> None:
 
 
 if __name__ == "__main__":
-    # Parse command-line arguments or use .env configuration
-    auto_games, manual_numbers = parse_arguments()
+    rep = Reporter("Lotto 6/45")
     
-    with sync_playwright() as playwright:
-        run(playwright, auto_games, manual_numbers)
+    try:
+        # Parse command-line arguments or use .env configuration
+        auto_games, manual_numbers = parse_arguments()
+        
+        with sync_playwright() as playwright:
+            process_result = run(playwright, auto_games, manual_numbers, rep)
+            rep.success(process_result)
+            
+    except Exception as e:
+        rep.fail(traceback.format_exc())
+        sys.exit(1)

@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
 from login import login
 
+import traceback
+from reporter import Reporter
+
 # .env loading is handled by login module import
 
 CHARGE_PIN = os.environ.get('CHARGE_PIN')
@@ -160,7 +163,7 @@ def charge_deposit(page: Page, amount: int) -> bool:
         bool: 충전 요청 성공 여부
     """
     if not CHARGE_PIN:
-        print("❌ Error: CHARGE_PIN not found in environment variables.")
+        print("Error: CHARGE_PIN not found in environment variables.")
         return False
 
     print(f"Navigating to charge page for {amount:,} won...")
@@ -172,7 +175,7 @@ def charge_deposit(page: Page, amount: int) -> bool:
     # 금액 선택
     amount_map = {5000: "5,000", 10000: "10,000", 20000: "20,000"}
     if amount not in amount_map:
-        print(f"❌ Error: Invalid amount {amount}. Choose 5000, 10000, 20000.")
+        print(f"Error: Invalid amount {amount}. Choose 5000, 10000, 20000.")
         return False
         
     # Updated selector from 'amoundApply' to 'EcAmt'
@@ -198,7 +201,7 @@ def charge_deposit(page: Page, amount: int) -> bool:
     number_map = parse_keypad(page)
     
     if len(number_map) < 9:
-        print(f"❌ Error: Keypad recognition failed (only {len(number_map)} digits).")
+        print(f"Error: Keypad recognition failed (only {len(number_map)} digits).")
         return False
         
     for digit in CHARGE_PIN:
@@ -211,18 +214,20 @@ def charge_deposit(page: Page, amount: int) -> bool:
     page.wait_for_load_state("networkidle")
     return True
 
-def run(playwright: Playwright, amount: int):
-    browser = playwright.chromium.launch(headless=False)
+def run(playwright: Playwright, amount: int, reporter: Reporter):
+    browser = playwright.chromium.launch(headless=True)
     context = browser.new_context()
     page = context.new_page()
     
     try:
+        reporter.stage("LOGIN")
         login(page)
+        reporter.stage("CHARGE")
         success = charge_deposit(page, amount)
         if success:
-            print("✅ Charge completed successfully!")
+            print("Charge completed successfully!")
         else:
-            print("❌ Charge failed.")
+            print("Charge failed.")
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
@@ -237,5 +242,11 @@ if __name__ == "__main__":
         except ValueError:
             pass
             
+    rep = Reporter("Balance Charge")
     with sync_playwright() as playwright:
-        run(playwright, amount)
+        try:
+            run(playwright, amount, rep)
+            rep.success({"amount": amount})
+        except Exception:
+            rep.fail(traceback.format_exc())
+            sys.exit(1)

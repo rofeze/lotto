@@ -8,10 +8,14 @@ from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright
 from login import login
 
+import sys
+import traceback
+from reporter import Reporter
+
 # .env loading is handled by login module import
 
 
-def run(playwright: Playwright) -> None:
+def run(playwright: Playwright, reporter: Reporter) -> None:
     """
     연금복권 720+를 구매합니다.
     '모든 조'를 선택하여 임의의 번호로 5매(5,000원)를 구매합니다.
@@ -20,7 +24,7 @@ def run(playwright: Playwright) -> None:
         playwright: Playwright 객체
     """
     # Create browser, context, and page
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=True)
     context = browser.new_context()
     page = context.new_page()
     
@@ -28,16 +32,19 @@ def run(playwright: Playwright) -> None:
     page.on("dialog", lambda dialog: dialog.accept())
 
     # Perform login using injected page
+    reporter.stage("LOGIN")
     login(page)
+    
+    reporter.stage("NAVIGATE")
 
     try:
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
-        print("🚀 Navigating to Lotto 720 Wrapper page...")
+        print("Navigating to Lotto 720 Wrapper page...")
         page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000)
         
         # Check if we were redirected to login page (session lost)
         if "/login" in page.url or "method=login" in page.url:
-            print("⚠️ Redirection to login page detected. Attempting to log in again...")
+            print("Redirection to login page detected. Attempting to log in again...")
             login(page)
             page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000)
 
@@ -48,9 +55,9 @@ def run(playwright: Playwright) -> None:
         try:
             # Wait for either #ifrm_tab or the main game container
             page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
-            print("✅ Iframe #ifrm_tab found")
+            print("Iframe #ifrm_tab found")
         except Exception:
-            print("⚠️ Iframe #ifrm_tab not visible. Current URL:", page.url)
+            print("Iframe #ifrm_tab not visible. Current URL:", page.url)
             # Take a screenshot for debugging if possible (optional)
             # page.screenshot(path="lotto720_error.png")
             
@@ -62,12 +69,12 @@ def run(playwright: Playwright) -> None:
              # Increase timeout for slow iframe loads
              frame.locator("#curdeposit, .lpdeposit").first.wait_for(state="attached", timeout=30000)
         except Exception as e:
-             print(f"⚠️ Timeout waiting for iframe content ({e}). Retrying navigation...")
+             print(f"Timeout waiting for iframe content ({e}). Retrying navigation...")
              page.reload(wait_until="networkidle")
              page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
              frame.locator("#curdeposit, .lpdeposit").first.wait_for(state="attached", timeout=30000)
 
-        print('✅ Navigated to Lotto 720 Game Frame')
+        print('Navigated to Lotto 720 Game Frame')
         
         # ----------------------------------------------------
         # Verify Session & Balance (Inside Frame)
@@ -77,9 +84,9 @@ def run(playwright: Playwright) -> None:
         # 1. Check Login Session (via hidden input in frame)
         user_id_val = frame.locator("input[name='USER_ID']").get_attribute("value")
         if not user_id_val:
-            raise Exception("❌ Session lost: Not logged in on Game Frame (USER_ID empty).")
+            raise Exception("Session lost: Not logged in on Game Frame (USER_ID empty).")
         
-        print(f"🔑 Login ID on Game Page: {user_id_val}")
+        print(f"Login ID on Game Page: {user_id_val}")
 
         # 2. Check Balance (via hidden input #curdeposit in frame)
         balance_val = frame.locator("#curdeposit").get_attribute("value")
@@ -93,12 +100,12 @@ def run(playwright: Playwright) -> None:
             current_balance = int(balance_val)
         except ValueError:
             current_balance = 0
-            print(f"⚠️ Could not parse balance value: '{balance_val}', assuming 0.")
+            print(f"Could not parse balance value: '{balance_val}', assuming 0.")
 
-        print(f"💰 Current Balance on Game Page: {current_balance:,} KRW")
+        print(f"Current Balance on Game Page: {current_balance:,} KRW")
 
         if current_balance == 0:
-            raise Exception("❌ Deposit is 0 KRW. Cannot proceed with purchase. Please charge your account.")
+            raise Exception("Deposit is 0 KRW. Cannot proceed with purchase. Please charge your account.")
 
         # Dismiss popup if present (inside frame)
         if frame.locator("#popupLayerAlert").is_visible():
@@ -135,6 +142,7 @@ def run(playwright: Playwright) -> None:
         """)
 
         # [자동번호] 클릭 - use force to bypass any remaining intercepting elements
+        reporter.stage("PURCHASE")
         frame.locator(".lotto720_btn_auto_number").click(force=True)
         
         time.sleep(2)
@@ -152,7 +160,7 @@ def run(playwright: Playwright) -> None:
         payment_val = int(re.sub(r'[^0-9]', '', payment_amount_text) or '0')
 
         if payment_val != 5000:
-            print(f"❌ Error: Payment mismatch (Expected 5000, Displayed {payment_val})")
+            print(f"Error: Payment mismatch (Expected 5000, Displayed {payment_val})")
             return
 
         # [구매하기] 클릭
@@ -166,17 +174,23 @@ def run(playwright: Playwright) -> None:
         confirm_popup.locator("a.btn_blue").click()
         
         time.sleep(2)
-        print("✅ Lotto 720: All sets purchased successfully!")
+        print("Lotto 720: All sets purchased successfully!")
         
 
     except Exception as e:
         print(f"An error occurred: {e}")
+        raise # Re-raise the exception to be caught by the main block
     finally:
         # Cleanup
         context.close()
         browser.close()
 
 if __name__ == "__main__":
-    with sync_playwright() as playwright:
-        run(playwright)
-
+    rep = Reporter("Lotto 720")
+    try:
+        with sync_playwright() as playwright:
+            run(playwright, rep)
+            rep.success({"processed_count": 5}) # Fixed at 5 games as per script logic
+    except Exception:
+        rep.fail(traceback.format_exc())
+        sys.exit(1)

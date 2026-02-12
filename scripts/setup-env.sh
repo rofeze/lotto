@@ -7,92 +7,73 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$PROJECT_DIR/.venv"
 
-echo "🎰 Lotto Auto Purchase - Environment Setup"
-echo "============================================"
-echo ""
-echo "📂 Project directory: $PROJECT_DIR"
+echo "Lotto - Environment Setup"
+echo "========================================"
+echo "Project directory: $PROJECT_DIR"
 echo ""
 
-# Step 1: Check Python
-echo "🐍 Checking Python installation..."
+# Check Python
+echo "Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Error: Python 3 is not installed"
+    echo "Error: Python 3 is not installed"
     echo "Please install Python 3.9 or higher"
     exit 1
 fi
 PYTHON_VERSION=$(python3 --version)
-echo "✅ Found: $PYTHON_VERSION"
+echo "Found: $PYTHON_VERSION"
 echo ""
 
-# Step 2: Create virtual environment
+# Create virtual environment
 if [ ! -d "$VENV_DIR" ]; then
-    echo "📦 Creating virtual environment..."
+    echo "Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
-    echo "✅ Virtual environment created at: $VENV_DIR"
+    echo "Virtual environment created at: $VENV_DIR"
 else
-    echo "✅ Virtual environment already exists"
+    echo "Virtual environment already exists"
 fi
 echo ""
 
-# Step 3: Upgrade pip
-echo "⬆️  Upgrading pip..."
+# Upgrade pip
+echo "Upgrading pip..."
 "$VENV_DIR/bin/pip" install --upgrade pip --quiet
-echo "✅ pip upgraded"
+echo "pip upgraded"
 echo ""
 
-# Step 4: Install dependencies
-echo "📥 Installing Python dependencies..."
+# Install dependencies
+echo "Installing Python dependencies..."
 "$VENV_DIR/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
-echo "✅ Dependencies installed:"
-"$VENV_DIR/bin/pip" list | grep -E "playwright|pytest-playwright|pytesseract|Pillow|python-dotenv"
+echo "Dependencies installed"
 echo ""
 
-# Step 5: Install Playwright browsers
-echo "🌐 Installing Playwright browsers..."
+# Install Playwright browsers
+echo "Installing Playwright browsers..."
 "$VENV_DIR/bin/playwright" install chromium
 
 # Install system dependencies on Linux (requires sudo)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "🐧 Detection Linux: Installing system dependencies for headless browser..."
-    echo "🔑 Sudo password may be required."
+    echo "Linux detected: Installing system dependencies for headless browser..."
+    echo "Sudo password may be required."
     sudo "$VENV_DIR/bin/playwright" install-deps chromium
 fi
 
-echo "✅ Playwright Chromium browser installed"
+echo "Playwright Chromium browser installed"
 echo ""
 
-# Step 6: Check .env file
+# Check .env file
 if [ ! -f "$PROJECT_DIR/.env" ]; then
-    echo "⚠️  Warning: .env file not found"
-    echo "📝 Creating .env from .env.example..."
+    echo "Creating .env from .env.example..."
     cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
-    echo "✅ .env file created"
-    echo ""
-    echo "🔧 Please edit .env and configure:"
-    echo "   - USER_ID: Your dhlottery.co.kr ID"
-    echo "   - PASSWD: Your password"
-    echo "   - CHARGE_PIN: Your 6-digit charge PIN"
-    echo "   - AUTO_GAMES: Number of auto games (optional)"
-    echo "   - MANUAL_NUMBERS: Manual numbers in JSON format (optional)"
-    echo ""
+    echo ".env file created"
+    echo "Please edit .env and configure your settings"
 else
-    echo "✅ .env file exists"
+    echo ".env file exists"
 fi
 echo ""
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Environment setup completed!"
 echo ""
-echo "✅ Environment setup completed!"
-echo ""
-echo "📝 Next steps:"
-echo "  1. Configure your .env file:"
-echo "     nano $PROJECT_DIR/.env"
-echo ""
-echo "  2. Test the scripts:"
-echo "     cd $PROJECT_DIR"
-echo "     source .venv/bin/activate"
-echo "     ./src/balance.py"
-echo ""
-echo "  3. Install systemd timer (Linux only):"
-echo "     ./scripts/install-timer.sh"
+echo "Useful commands:"
+echo "  • Configure .env:       nano .env"
+echo "  • Run manually:         ./scripts/run.sh"
+echo "  • Install systemd:      ./scripts/install-systemd.sh"
 echo ""

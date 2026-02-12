@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
 from login import login
 
+import sys
+import traceback
+from reporter import Reporter
+
 # .env loading is handled by login module import
 
 
@@ -12,16 +16,16 @@ def get_balance(page: Page) -> dict:
     """
     마이페이지에서 예치금 잔액과 구매가능 금액을 조회합니다.
     """
-    print("⏳ Navigating to My Page...")
+    print("Navigating to My Page...")
     page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=30000)
     
     # Check if redirected to login
     if "/login" in page.url:
-        print("⚠️ Redirection to login page detected. Attempting to log in again...")
+        print("Redirection to login page detected. Attempting to log in again...")
         login(page)
         page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=30000)
     
-    print("⏳ Waiting for balance elements...")
+    print("Waiting for balance elements...")
     # Try multiple possible selectors for the balance
     # #navTotalAmt: header balance (preferred)
     # #totalAmt: old selector
@@ -30,10 +34,10 @@ def get_balance(page: Page) -> dict:
         # Wait for any of the common indicators
         page.wait_for_selector("#navTotalAmt, #totalAmt, .pntDpstAmt, #divCrntEntrsAmt", timeout=20000)
     except Exception as e:
-        print(f"⚠️ Balance selectors not found immediately ({e}). Current page: {page.url}")
+        print(f"Balance selectors not found immediately ({e}). Current page: {page.url}")
         # diagnostic: if we see login button, we are not logged in
         if page.get_by_role("link", name="로그인").is_visible():
-            raise Exception("❌ Not logged in. Cannot retrieve balance.")
+            raise Exception("Not logged in. Cannot retrieve balance.")
 
     # 1. Get deposit balance (예치금 잔액)
     deposit_selectors = ["#navTotalAmt", "#totalAmt", ".pntDpstAmt", ".totalAmt"]
@@ -42,7 +46,7 @@ def get_balance(page: Page) -> dict:
         el = page.locator(selector).first
         if el.is_visible():
             deposit_text = el.inner_text().strip()
-            print(f"✅ Found deposit balance via {selector}")
+            print(f"Found deposit balance via {selector}")
             break
     
     # 2. Get available amount (구매가능)
@@ -52,7 +56,7 @@ def get_balance(page: Page) -> dict:
         el = page.locator(selector).first
         if el.is_visible():
             available_text = el.inner_text().strip()
-            print(f"✅ Found available amount via {selector}")
+            print(f"Found available amount via {selector}")
             break
     
     # Parse amounts (remove non-digits)
@@ -65,28 +69,30 @@ def get_balance(page: Page) -> dict:
     }
 
 
-def run(playwright: Playwright) -> dict:
+def run(playwright: Playwright, reporter: Reporter) -> dict:
     """로그인 후 잔액 정보를 조회합니다."""
     # Create browser, context, and page
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=True)
     context = browser.new_context()
     page = context.new_page()
     
     try:
         # Perform login
+        reporter.stage("LOGIN")
         login(page)
         
         # Get balance information
+        reporter.stage("GET_BALANCE")
         balance_info = get_balance(page)
         
         # Print results in a clean format
-        print(f"💰 예치금 잔액: {balance_info['deposit_balance']:,}원")
-        print(f"🛒 구매가능: {balance_info['available_amount']:,}원")
+        print(f"Deposit Balance: {balance_info['deposit_balance']:,} won")
+        print(f"Available Amount: {balance_info['available_amount']:,} won")
         
         return balance_info
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         raise
     finally:
         # Cleanup
@@ -95,5 +101,11 @@ def run(playwright: Playwright) -> dict:
 
 
 if __name__ == "__main__":
-    with sync_playwright() as playwright:
-        run(playwright)
+    rep = Reporter("Balance Check")
+    try:
+        with sync_playwright() as playwright:
+            balance_info = run(playwright, rep)
+            rep.success(balance_info)
+    except Exception as e:
+        rep.fail(traceback.format_exc())
+        sys.exit(1)
