@@ -49,27 +49,39 @@ def save_session(context, path=SESSION_PATH):
     print(f"Session saved to {path}")
 
 
+
+def check_logged_in_elements(page: Page, timeout: int = 2000) -> bool:
+    """Helper to check for visual indicators of being logged in."""
+    try:
+        # Check standard logout indicators
+        if page.locator("#logoutBtn, .btn_logout, .btn-logout").first.is_visible(timeout=timeout):
+            return True
+        if page.get_by_text("로그아웃", exact=False).first.is_visible(timeout=timeout):
+            return True
+        if page.locator("a[href*='mypage']").first.is_visible(timeout=timeout):
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def is_logged_in(page: Page) -> bool:
     """
     Check if the user is currently logged in.
     This is a non-intrusive check.
     """
     try:
-        # If we are on a page that HAS a logout link, we are logged in
-        if page.get_by_text("로그아웃").first.is_visible(timeout=3000):
+        if check_logged_in_elements(page, timeout=2000):
             return True
         
         # If we are on the login page itself, we are likely NOT logged in
-        # (Unless it's a redirect, but usually the logout button check covers it)
         if "/login" in page.url or "method=login" in page.url:
              return False
 
         # Try to navigate to a page that requires login and see if it redirects
-        # This is the most reliable check but slightly more "active"
-        # We only do this if we are not sure (e.g. on main page but buttons not visible yet)
         if page.url == "about:blank" or "dhlottery.co.kr" not in page.url:
-            page.goto("https://www.dhlottery.co.kr/main.do", timeout=15000)
-            if page.get_by_text("로그아웃").first.is_visible(timeout=5000):
+            page.goto("https://www.dhlottery.co.kr/common.do?method=main", timeout=15000)
+            if check_logged_in_elements(page, timeout=5000):
                 return True
         
         return False
@@ -101,7 +113,7 @@ def login(page: Page) -> None:
     
     # 3. Check if we were redirected away from login (means already logged in)
     if "/login" not in page.url and "method=login" not in page.url:
-        if page.get_by_text("로그아웃").first.is_visible(timeout=5000):
+        if check_logged_in_elements(page, timeout=5000):
             print("Already logged in (redirected from login page)")
             return
 
@@ -110,7 +122,7 @@ def login(page: Page) -> None:
         print("Checking login form...")
         # If we are not on login page, we might be already logged in
         if "/login" not in page.url and "method=login" not in page.url:
-             if page.get_by_text("로그아웃").first.is_visible(timeout=2000):
+             if check_logged_in_elements(page, timeout=2000):
                  print("Already logged in (detected via URL and logout button)")
                  return
 
@@ -125,8 +137,15 @@ def login(page: Page) -> None:
         print("Clicking login button...")
         page.click("#btnLogin")
     except Exception as e:
+        # Debugging: Capture state on failure
+        print(f"Login failed. Current URL: {page.url}")
+        print(f"Page Title: {page.title()}")
+        screenshot_path = "login_failed.png"
+        page.screenshot(path=screenshot_path)
+        print(f"Saved screenshot to {screenshot_path}")
+        
         # If we can't find the input, maybe we ARE logged in but visibility check failed
-        if page.get_by_text("로그아웃").first.is_visible(timeout=5000) or "mypage" in page.url:
+        if check_logged_in_elements(page, timeout=5000) or "mypage" in page.url:
             print("Already logged in (detected after wait failure)")
             return
         raise Exception(f"Login failed or inputs not found: {e}")
@@ -134,19 +153,28 @@ def login(page: Page) -> None:
     # 5. Wait for navigation and verify login
     try:
         print("Waiting for login completion...")
-        page.get_by_text("로그아웃").first.wait_for(timeout=15000)
-        print('Logged in successfully')
+        # Simple wait for logout button presence
+        start_time = time.time()
+        while time.time() - start_time < 15:
+            if check_logged_in_elements(page, timeout=1000):
+                print('Logged in successfully')
+                break
+            time.sleep(0.5)
+        else:
+             raise TimeoutError("Login verification timed out")
+
     except Exception:
         print("Login verification timed out. Checking content...")
-        content = page.content()
-        if "로그아웃" in content:
-            print('Logged in successfully (detected logout button in content)')
-        elif "아이디 또는 비밀번호가 일치하지 않습니다" in content:
-            raise Exception("Login failed: Invalid ID or password.")
+        if check_logged_in_elements(page, timeout=2000):
+             print('Logged in successfully (detected via check helper)')
         else:
-            if "/login" in page.url:
-                 raise Exception(f"Login failed: Still on login page ({page.url})")
-            print(f"Assuming login might have worked (URL: {page.url})")
+             content = page.content()
+             if "아이디 또는 비밀번호가 일치하지 않습니다" in content:
+                 raise Exception("Login failed: Invalid ID or password.")
+             else:
+                 if "/login" in page.url:
+                      raise Exception(f"Login failed: Still on login page ({page.url})")
+                 print(f"Assuming login might have worked (URL: {page.url})")
 
     # Give a bit more time for session cookies to be stable
     time.sleep(2)
