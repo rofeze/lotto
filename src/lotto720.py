@@ -24,11 +24,17 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
         playwright: Playwright 객체
     """
     # Create browser, context, and page
+    # Use a fixed Desktop User-Agent to prevent redirection to mobile site (m.dhlottery.co.kr)
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     browser = playwright.chromium.launch(headless=True)
     
     # Load session if exists
     storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
-    context = browser.new_context(storage_state=storage_state)
+    context = browser.new_context(
+        storage_state=storage_state,
+        user_agent=user_agent,
+        viewport={"width": 1920, "height": 1080}
+    )
     page = context.new_page()
     
     # Setup alert handler to automatically accept any alerts
@@ -49,11 +55,18 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
         print("Navigating to Lotto 720 Wrapper page...")
         page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000)
         
-        # Check if we were redirected to login page (session lost)
-        if "/login" in page.url or "method=login" in page.url:
-            print("Redirection to login page detected. Attempting to log in again...")
+        # Check if we were redirected to mobile or login page (session lost)
+        if "/login" in page.url or "method=login" in page.url or "m.dhlottery.co.kr" in page.url:
+            print(f"Redirection detected (URL: {page.url}). Attempting to log in again...")
             login(page)
             page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000)
+
+        # Check for logout state on the wrapper page itself
+        # The wrapper page usually has a "로그인" button if session is invalid
+        if page.get_by_text("로그인", exact=True).first.is_visible(timeout=3000):
+             print("Wrapper page shows 'Login' button. Re-logging in...")
+             login(page)
+             page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LP72", timeout=30000)
 
         # Access the game iframe
         # The actual game UI is loaded inside this iframe
@@ -61,7 +74,7 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
         # Wait for the iframe element to be visible on the main page
         try:
             # Wait for either #ifrm_tab or the main game container
-            page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
+            page.wait_for_selector("#ifrm_tab", state="attached", timeout=20000)
             print("Iframe #ifrm_tab found")
         except Exception:
             print("Iframe #ifrm_tab not visible. Current URL:", page.url)
