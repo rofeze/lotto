@@ -52,14 +52,12 @@ echo "Installing Playwright browsers..."
 # Install system dependencies on Linux (requires sudo)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     if command -v pacman &> /dev/null; then
-        echo "Arch Linux (or derivative) detected. Installing system dependencies for headless browser..."
+        echo "Arch Linux (or derivative) detected. Installing minimal headless dependencies..."
         echo "Sudo password may be required."
-        # These are common dependencies for Chromium on Arch Linux
+        # User requested minimal list (Apt -> Arch mapping)
         sudo pacman -S --needed --noconfirm \
-            nss nspr atk at-spi2-atk at-spi2-core cups libdrm \
-            libxkbcommon libxcomposite libxdamage libxext \
-            libxfixes libxrandr mesa alsa-lib pango cairo \
-            gdk-pixbuf2 gtk3 libxshmfence
+            nss nspr at-spi2-core libxkbcommon libxcomposite \
+            libxdamage libxrandr mesa alsa-lib pango cairo gdk-pixbuf2
     else
         echo "Linux detected: Installing system dependencies for headless browser..."
         echo "Sudo password may be required."
